@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { createSeedRepository } from "../helpers/testData.js";
 
-describe("RecivimOS UI pages", () => {
+describe("PedimOS UI pages", () => {
   const apps: ReturnType<typeof buildApp>[] = [];
 
   afterEach(async () => {

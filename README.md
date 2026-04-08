@@ -1,4 +1,4 @@
-# RecivimOS Backend (Vertical Slice v1)
+# PedimOS Backend (Vertical Slice v1)
 
 Backend `Fastify + TypeScript + Prisma` con contrato `CreateExternalOrder v1` para flujo `Second App -> Main Backend`.
 

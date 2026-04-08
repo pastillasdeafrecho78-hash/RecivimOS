@@ -9,7 +9,7 @@ const asCurrency = (amount: number): string =>
 
 const readIntegrationConfig = (): { apiKey: string; slug: string } => {
   try {
-    const raw = localStorage.getItem("recivimos.integration.v1");
+    const raw = localStorage.getItem("pedimos.integration.v1");
     if (!raw) return { apiKey: "", slug: "" };
     const parsed = JSON.parse(raw) as { apiKey?: string; slug?: string };
     return { apiKey: parsed.apiKey ?? "", slug: parsed.slug ?? "" };
@@ -177,7 +177,7 @@ export function App() {
             <div className="hero-top">
               <div>
                 <div className="badge">PedimOS</div>
-                <h1>{menu?.restaurante?.nombre ?? "Canal cliente RecivimOS"}</h1>
+                <h1>{menu?.restaurante?.nombre ?? "Canal cliente PedimOS"}</h1>
                 <p>Pide rapido, sin friccion y con envio estructurado directo al flujo operativo del restaurante.</p>
               </div>
             </div>

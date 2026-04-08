@@ -6,7 +6,7 @@ export type CartItem = {
   productId: string;
 };
 
-const CART_KEY = "recivimos.customer.cart.v1";
+const CART_KEY = "pedimos.customer.cart.v1";
 
 export const cartState = {
   read(): CartItem[] {

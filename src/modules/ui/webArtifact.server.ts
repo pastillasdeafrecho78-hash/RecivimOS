@@ -26,10 +26,10 @@ const fallbackHtml = `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>RecivimOS</title>
+    <title>PedimOS</title>
   </head>
   <body style="font-family: Inter, system-ui, sans-serif; padding: 24px">
-    <h1>RecivimOS</h1>
+    <h1>PedimOS</h1>
     <p>UI artifact no disponible en este entorno. Compila web/build-artifact para habilitar el frontend cliente.</p>
   </body>
 </html>`;
