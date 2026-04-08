@@ -7,7 +7,8 @@ import { OrderScopeValidator } from "./orderScopeValidator.js";
 type IngestionInput = {
   restauranteSlug: string;
   restauranteId: string;
-  apiKeyId: string;
+  apiKeyId: string | undefined;
+  authMode: "api_key" | "public_session";
   idempotencyKey: string;
   payload: CreateExternalOrderBody;
   ttlHours: number;
@@ -28,15 +29,17 @@ export class OrderIngestionService {
       throw canonicalError("branch_scope_mismatch", "Contexto de tenant invalido");
     }
 
-    const idempotencyState = await this.idempotencyService.start({
-      restauranteId: input.restauranteId,
-      apiKeyId: input.apiKeyId,
-      idempotencyKey: input.idempotencyKey,
-      payload: input.payload,
-      ttlHours: input.ttlHours
-    });
-
-    if (idempotencyState.mode === "replay") {
+    const canUsePersistentIdempotency = input.authMode === "api_key" && !!input.apiKeyId;
+    const idempotencyState = canUsePersistentIdempotency
+      ? await this.idempotencyService.start({
+          restauranteId: input.restauranteId,
+          apiKeyId: input.apiKeyId as string,
+          idempotencyKey: input.idempotencyKey,
+          payload: input.payload,
+          ttlHours: input.ttlHours
+        })
+      : null;
+    if (idempotencyState?.mode === "replay") {
       const replay = idempotencyState.response;
       replay.data.idempotent = true;
       return { httpStatus: 200, body: replay };
@@ -69,7 +72,9 @@ export class OrderIngestionService {
         createdAt: created.createdAt.toISOString()
       }
     };
-
+    if (!idempotencyState || idempotencyState.mode !== "continue") {
+      return { httpStatus: 201, body: response };
+    }
     await this.idempotencyService.complete(idempotencyState.recordId, response);
     return { httpStatus: 201, body: response };
   }

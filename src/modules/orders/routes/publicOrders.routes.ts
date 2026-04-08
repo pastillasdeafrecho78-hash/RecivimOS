@@ -78,16 +78,11 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
     if (!restaurante || !restaurante.isActive || restaurante.isSuspended) {
       throw canonicalError("branch_not_found", "Sucursal no encontrada o inactiva");
     }
-    const apiKey = await repository.findAnyActiveApiKeyForRestaurante(restaurante.id);
-    if (!apiKey) {
-      throw canonicalError("invalid_api_key", "No hay credenciales activas para esta sucursal");
-    }
     reply.header(
       "set-cookie",
       authGuard.createPublicSessionCookie({
         restauranteId: restaurante.id,
-        restauranteSlug: restaurante.slug,
-        apiKeyId: apiKey.id
+        restauranteSlug: restaurante.slug
       })
     );
     return reply.status(200).send({
@@ -192,6 +187,7 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
       restauranteSlug: headerSlug || context.restauranteSlug,
       restauranteId: context.restauranteId,
       apiKeyId: context.apiKeyId,
+      authMode: context.authMode,
       idempotencyKey,
       payload: body,
       ttlHours: env.IDEMPOTENCY_TTL_HOURS

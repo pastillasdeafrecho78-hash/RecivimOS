@@ -8,7 +8,6 @@ import type { OrdersRepository } from "../orders/repositories/orders.repository.
 type PublicSessionPayload = {
   restauranteId: string;
   restauranteSlug: string;
-  apiKeyId: string;
   exp: number;
 };
 
@@ -60,13 +59,11 @@ export class IntegrationAuthGuard {
   createPublicSessionCookie(input: {
     restauranteId: string;
     restauranteSlug: string;
-    apiKeyId: string;
   }): string {
     const expiresInSeconds = env.PUBLIC_SESSION_TTL_MINUTES * 60;
     const token = this.encode({
       restauranteId: input.restauranteId,
       restauranteSlug: input.restauranteSlug,
-      apiKeyId: input.apiKeyId,
       exp: Math.floor(Date.now() / 1000) + expiresInSeconds
     });
     return `${this.cookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${expiresInSeconds}`;
@@ -115,7 +112,7 @@ export class IntegrationAuthGuard {
       request.integrationContext = {
         restauranteId: session.restauranteId,
         restauranteSlug: session.restauranteSlug,
-        apiKeyId: session.apiKeyId,
+        apiKeyId: undefined,
         authMode: "public_session"
       };
       return;

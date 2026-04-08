@@ -5,7 +5,7 @@ declare module "fastify" {
     integrationContext?: {
       restauranteId: string;
       restauranteSlug: string;
-      apiKeyId: string;
+      apiKeyId: string | undefined;
       authMode: "api_key" | "public_session";
     };
   }
