@@ -38,7 +38,9 @@ const ensureAccountTables = async (): Promise<void> => {
       "isCommissionFree" boolean not null default false,
       "createdAt" timestamp without time zone not null default current_timestamp,
       "updatedAt" timestamp without time zone not null default current_timestamp
-    );
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
     create table if not exists "PedimosCuentaPedidoClaim" (
       "id" text primary key,
       "restauranteId" text not null,
@@ -47,9 +49,15 @@ const ensureAccountTables = async (): Promise<void> => {
       "source" text not null default 'manual',
       "createdAt" timestamp without time zone not null default current_timestamp,
       unique("restauranteId", "usuarioId", "orderId")
-    );
-    create index if not exists "PedimosCuentaPedidoClaim_restauranteId_idx" on "PedimosCuentaPedidoClaim" ("restauranteId");
-    create index if not exists "PedimosCuentaPedidoClaim_usuarioId_idx" on "PedimosCuentaPedidoClaim" ("usuarioId");
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    create index if not exists "PedimosCuentaPedidoClaim_restauranteId_idx"
+    on "PedimosCuentaPedidoClaim" ("restauranteId")
+  `);
+  await prisma.$executeRawUnsafe(`
+    create index if not exists "PedimosCuentaPedidoClaim_usuarioId_idx"
+    on "PedimosCuentaPedidoClaim" ("usuarioId")
   `);
 };
 
@@ -71,10 +79,16 @@ const ensureReservationsTable = async (): Promise<void> => {
       "notes" text null,
       "createdAt" timestamp without time zone not null default current_timestamp,
       "updatedAt" timestamp without time zone not null default current_timestamp
-    );
-    create index if not exists "Reservacion_restauranteId_idx" on "Reservacion" ("restauranteId");
-    create index if not exists "Reservacion_ownerUserId_idx" on "Reservacion" ("ownerUserId");
-    create index if not exists "Reservacion_reservedFor_idx" on "Reservacion" ("reservedFor");
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    create index if not exists "Reservacion_restauranteId_idx" on "Reservacion" ("restauranteId")
+  `);
+  await prisma.$executeRawUnsafe(`
+    create index if not exists "Reservacion_ownerUserId_idx" on "Reservacion" ("ownerUserId")
+  `);
+  await prisma.$executeRawUnsafe(`
+    create index if not exists "Reservacion_reservedFor_idx" on "Reservacion" ("reservedFor")
   `);
 };
 
