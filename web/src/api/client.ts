@@ -38,6 +38,15 @@ const parseJson = async <T>(response: Response): Promise<T> => {
 };
 
 export const apiClient = {
+  async startPublicSession(slug: string): Promise<void> {
+    const response = await fetch("/api/public/integraciones/pedidos/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug })
+    });
+    await parseJson<Record<string, unknown>>(response);
+  },
+
   async getBranches(): Promise<Branch[]> {
     const response = await fetch("/api/public/integraciones/pedidos/restaurantes");
     const json = await parseJson<{ data: Branch[] }>(response);
@@ -51,7 +60,6 @@ export const apiClient = {
   },
 
   async createOrder(input: {
-    apiKey: string;
     restauranteSlug: string;
     idempotencyKey: string;
     payload: CreateOrderPayload;
@@ -60,7 +68,6 @@ export const apiClient = {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": input.apiKey,
         "x-restaurante-slug": input.restauranteSlug,
         "x-idempotency-key": input.idempotencyKey
       },
@@ -70,14 +77,12 @@ export const apiClient = {
   },
 
   async getOrderStatus(input: {
-    apiKey: string;
     restauranteSlug: string;
     orderId: string;
     idempotencyKey: string;
   }): Promise<Record<string, unknown>> {
     const response = await fetch(`/api/public/integraciones/pedidos/orders/${encodeURIComponent(input.orderId)}`, {
       headers: {
-        "x-api-key": input.apiKey,
         "x-restaurante-slug": input.restauranteSlug,
         "x-idempotency-key": input.idempotencyKey
       }

@@ -4,8 +4,7 @@ import { env } from "../../../config/env.js";
 import { canonicalError } from "../../../shared/errors/canonicalErrors.js";
 import { IntegrationAuthGuard } from "../../auth/integrationAuth.js";
 import {
-  createExternalOrderBodySchema,
-  externalOrderHeadersSchema
+  createExternalOrderBodySchema
 } from "../contracts/createExternalOrder.contract.js";
 import type { OrdersRepository } from "../repositories/orders.repository.js";
 import { OrderIngestionService } from "../services/orderIngestion.service.js";
@@ -18,6 +17,8 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
   const authGuard = new IntegrationAuthGuard(repository);
   const ingestionService = new OrderIngestionService(repository);
   const servimosBaseUrl = env.SERVIMOS_PUBLIC_BASE_URL?.replace(/\/$/, "");
+  const randomIdempotency = (): string =>
+    `session-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
 
   const normalize = (value: string): string => value.trim().toLowerCase();
 
@@ -64,6 +65,38 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
     return reply.status(200).send({
       success: true,
       data: { status: "ok" }
+    });
+  });
+
+  app.post("/api/public/integraciones/pedidos/session", async (request, reply) => {
+    const body = z
+      .object({
+        slug: z.string().min(1),
+      })
+      .parse(request.body ?? {});
+    const restaurante = await repository.findRestauranteBySlug(body.slug);
+    if (!restaurante || !restaurante.isActive || restaurante.isSuspended) {
+      throw canonicalError("branch_not_found", "Sucursal no encontrada o inactiva");
+    }
+    const apiKey = await repository.findAnyActiveApiKeyForRestaurante(restaurante.id);
+    if (!apiKey) {
+      throw canonicalError("invalid_api_key", "No hay credenciales activas para esta sucursal");
+    }
+    reply.header(
+      "set-cookie",
+      authGuard.createPublicSessionCookie({
+        restauranteId: restaurante.id,
+        restauranteSlug: restaurante.slug,
+        apiKeyId: apiKey.id
+      })
+    );
+    return reply.status(200).send({
+      success: true,
+      data: {
+        slug: restaurante.slug,
+        nombre: restaurante.nombre,
+        sessionMode: "public_session"
+      }
     });
   });
 
@@ -121,8 +154,7 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
           endpoint: "/api/public/integraciones/pedidos/orders",
           method: "POST",
           headers: {
-            "x-api-key": "string",
-            "x-restaurante-slug": "string",
+            "x-restaurante-slug": "string (optional con sesión pública)",
             "x-idempotency-key": "string",
             "x-api-version": "v1 (optional)",
             "x-correlation-id": "string (optional)"
@@ -132,8 +164,7 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
           endpoint: "/api/public/integraciones/pedidos/orders/:orderId",
           method: "GET",
           headers: {
-            "x-api-key": "string",
-            "x-restaurante-slug": "string"
+            "x-restaurante-slug": "string (optional con sesión pública)"
           }
         }
       }
@@ -141,19 +172,27 @@ export const registerPublicOrdersRoutes = (app: FastifyInstance, repository: Ord
   });
 
   app.post("/api/public/integraciones/pedidos/orders", { preHandler: authGuard.preHandler }, async (request, reply) => {
-    const headers = externalOrderHeadersSchema.parse(request.headers);
     const body = createExternalOrderBodySchema.parse(request.body);
 
     const context = request.integrationContext;
     if (!context) {
       throw new Error("Missing integration context");
     }
+    const rawHeaders = request.headers as Record<string, unknown>;
+    const headerSlug =
+      typeof rawHeaders["x-restaurante-slug"] === "string"
+        ? rawHeaders["x-restaurante-slug"].trim()
+        : "";
+    const idempotencyKey =
+      typeof rawHeaders["x-idempotency-key"] === "string" && rawHeaders["x-idempotency-key"].trim()
+        ? rawHeaders["x-idempotency-key"].trim()
+        : randomIdempotency();
 
     const result = await ingestionService.createExternalOrder({
-      restauranteSlug: headers["x-restaurante-slug"],
+      restauranteSlug: headerSlug || context.restauranteSlug,
       restauranteId: context.restauranteId,
       apiKeyId: context.apiKeyId,
-      idempotencyKey: headers["x-idempotency-key"],
+      idempotencyKey,
       payload: body,
       ttlHours: env.IDEMPOTENCY_TTL_HOURS
     });

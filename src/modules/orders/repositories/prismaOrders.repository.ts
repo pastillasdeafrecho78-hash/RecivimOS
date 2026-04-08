@@ -127,6 +127,19 @@ export class PrismaOrdersRepository implements OrdersRepository {
     return row ? mapApiKey(row) : null;
   }
 
+  async findAnyActiveApiKeyForRestaurante(restauranteId: string): Promise<ApiKeyRecord | null> {
+    const row = await this.prisma.integracionApiKey.findFirst({
+      where: {
+        restauranteId,
+        isActive: true,
+        scopes: { has: "orders_create" }
+      },
+      select: { id: true, restauranteId: true, keyHash: true, isActive: true, scopes: true },
+      orderBy: { createdAt: "asc" }
+    });
+    return row ? mapApiKey(row) : null;
+  }
+
   async findProductsByIds(productIds: string[]): Promise<ProductScopeRecord[]> {
     if (!productIds.length) return [];
     const rows = await this.prisma.producto.findMany({

@@ -6,6 +6,7 @@ declare module "fastify" {
       restauranteId: string;
       restauranteSlug: string;
       apiKeyId: string;
+      authMode: "api_key" | "public_session";
     };
   }
 }

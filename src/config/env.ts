@@ -5,7 +5,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().min(1).default("postgresql://postgres:postgres@localhost:5432/pedimos"),
   IDEMPOTENCY_TTL_HOURS: z.coerce.number().positive().default(48),
-  SERVIMOS_PUBLIC_BASE_URL: z.string().url().optional()
+  SERVIMOS_PUBLIC_BASE_URL: z.string().url().optional(),
+  PUBLIC_SESSION_SECRET: z.string().min(16).default("pedimos-public-session-dev-secret"),
+  PUBLIC_SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(180)
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

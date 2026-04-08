@@ -83,6 +83,14 @@ export class InMemoryOrdersRepository implements OrdersRepository {
     return this.apiKeys.find((k) => k.keyHash === hash) ?? null;
   }
 
+  async findAnyActiveApiKeyForRestaurante(restauranteId: string): Promise<ApiKeyRecord | null> {
+    return (
+      this.apiKeys.find(
+        (k) => k.restauranteId === restauranteId && k.isActive && k.scopes.includes("orders:create")
+      ) ?? null
+    );
+  }
+
   async findProductsByIds(productIds: string[]): Promise<ProductScopeRecord[]> {
     return this.productos.filter((p) => productIds.includes(p.id));
   }

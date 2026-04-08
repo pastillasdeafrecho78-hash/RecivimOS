@@ -7,27 +7,31 @@ const randomExternalOrderId = (): string => `ext-${Date.now()}-${Math.floor(Math
 const asCurrency = (amount: number): string =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
 
-const readIntegrationConfig = (): { apiKey: string; slug: string } => {
+const tabs = ["Mapa", "Explorar", "Menu", "Cuenta", "Pedido", "Historial"] as const;
+type TabId = (typeof tabs)[number];
+
+const readIntegrationConfig = (): { slug: string } => {
   try {
     const raw = localStorage.getItem("pedimos.integration.v1");
-    if (!raw) return { apiKey: "", slug: "" };
-    const parsed = JSON.parse(raw) as { apiKey?: string; slug?: string };
-    return { apiKey: parsed.apiKey ?? "", slug: parsed.slug ?? "" };
+    if (!raw) return { slug: "" };
+    const parsed = JSON.parse(raw) as { slug?: string };
+    return { slug: parsed.slug ?? "" };
   } catch {
-    return { apiKey: "", slug: "" };
+    return { slug: "" };
   }
 };
 
 export function App() {
+  const [activeTab, setActiveTab] = useState<TabId>("Mapa");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchSlug, setSelectedBranchSlug] = useState("");
   const [menu, setMenu] = useState<MenuCatalog | null>(null);
   const [query, setQuery] = useState("");
-  const [activeProductId, setActiveProductId] = useState("");
   const [menuError, setMenuError] = useState("");
   const [loadingMenu, setLoadingMenu] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [sessionReadySlug, setSessionReadySlug] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [apiKey, setApiKey] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -39,7 +43,6 @@ export function App() {
 
   useEffect(() => {
     const cfg = readIntegrationConfig();
-    setApiKey(cfg.apiKey);
     setSelectedBranchSlug(cfg.slug);
     setCart(cartState.read());
     void apiClient
@@ -55,21 +58,28 @@ export function App() {
 
   useEffect(() => {
     if (!selectedBranchSlug) return;
+    setCreatingSession(true);
+    setSessionReadySlug("");
     setLoadingMenu(true);
     setMenuError("");
     void apiClient
-      .getMenuBySlug(selectedBranchSlug)
+      .startPublicSession(selectedBranchSlug)
+      .then(() => {
+        setSessionReadySlug(selectedBranchSlug);
+        return apiClient.getMenuBySlug(selectedBranchSlug);
+      })
       .then(({ data, degraded }) => {
         setMenu(data);
-        if (degraded) {
-          setMenuError("El menu está en modo degradado. Verifica configuración de sucursal.");
-        }
+        if (degraded) setMenuError("Algunos elementos del menú no están disponibles por ahora.");
       })
       .catch((error) => {
         setMenu(null);
-        setMenuError(error instanceof Error ? error.message : "No se pudo cargar menu.");
+        setMenuError(error instanceof Error ? error.message : "No se pudo cargar el menú.");
       })
-      .finally(() => setLoadingMenu(false));
+      .finally(() => {
+        setCreatingSession(false);
+        setLoadingMenu(false);
+      });
   }, [selectedBranchSlug]);
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.qty * item.unitPrice, 0), [cart]);
@@ -84,8 +94,7 @@ export function App() {
     if (!term) return products;
     return products.filter((product) => product.nombre.toLowerCase().includes(term));
   }, [menu?.productos, query]);
-  const selectedProduct =
-    visibleProducts.find((product) => product.id === activeProductId) ?? visibleProducts[0] ?? null;
+  const selectedProduct = visibleProducts[0] ?? null;
 
   const addProduct = (productId: string, productName: string) => {
     const next = cartState.add({
@@ -99,10 +108,6 @@ export function App() {
   };
 
   const checkout = async () => {
-    if (!apiKey.trim()) {
-      setStatusLog(["Configura x-api-key para continuar."]);
-      return;
-    }
     if (!selectedBranchSlug) {
       setStatusLog(["Selecciona sucursal para continuar."]);
       return;
@@ -131,7 +136,6 @@ export function App() {
       };
 
       const created = await apiClient.createOrder({
-        apiKey: apiKey.trim(),
         restauranteSlug: selectedBranchSlug,
         idempotencyKey: currentIdempotency,
         payload
@@ -161,8 +165,8 @@ export function App() {
       setStatusLog(["No hay orderId para consultar."]);
       return;
     }
-    if (!apiKey.trim() || !selectedBranchSlug) {
-      setStatusLog(["Faltan credenciales o sucursal."]);
+    if (!selectedBranchSlug) {
+      setStatusLog(["Selecciona sucursal para consultar estado."]);
       return;
     }
 
@@ -171,7 +175,6 @@ export function App() {
     for (let i = 0; i < 6; i++) {
       try {
         const response = await apiClient.getOrderStatus({
-          apiKey: apiKey.trim(),
           restauranteSlug: selectedBranchSlug,
           orderId: lastOrderId,
           idempotencyKey: `poll-${Date.now()}-${i}`
@@ -192,40 +195,58 @@ export function App() {
     <div className="app-shell">
       <div className="bg-orbs" />
       <div className="layout-wide">
-        <header className="hero-card">
-          <div className="hero-row">
-            <div>
+        <header className="top-nav">
+          <div className="top-nav-row">
+            <div className="brand-row">
               <div className="badge">PedimOS</div>
-              <h1>{menu?.restaurante?.nombre ?? "Pide lo que se te antoje"}</h1>
-              <p>Canal cliente conectado al flujo operativo: sucursal, menu, carrito, pedido y seguimiento.</p>
+              <strong>{menu?.restaurante?.nombre ?? "Pide lo que se te antoje"}</strong>
             </div>
-            <div className="hero-controls">
-              <div className="chip">Sucursales activas: {branches.length}</div>
-              <div className="chip">Productos: {menu?.productos.length ?? 0}</div>
-              <div className="chip alert">{menuError ? menuError : "Operacion en linea"}</div>
-            </div>
+            <div className="follow-chip">Siguenos y descubre promos del día</div>
+          </div>
+          <nav className="tab-grid">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                className={`tab-btn ${activeTab === tab ? "active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+          <div className="top-nav-row">
+            <input
+              className="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar sucursal o producto..."
+            />
+            <select className="search" value={selectedBranchSlug} onChange={(event) => setSelectedBranchSlug(event.target.value)}>
+              <option value="">Sucursal</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.slug}>
+                  {branch.nombre}
+                </option>
+              ))}
+            </select>
           </div>
         </header>
 
-        <section className="three-col">
-          <aside className="panel">
+        {activeTab === "Mapa" ? (
+          <section className="panel">
             <div className="panel-head">
-              <h2>Cerca de ti</h2>
-              <span className="muted">Mapa</span>
+              <h2>Mapa</h2>
+              <span className="muted">{creatingSession ? "Conectando..." : "Listo"}</span>
             </div>
             <div className="map-box">Mapa de sucursales</div>
-            <p className="muted">El tiempo/estado real puede reflejarse por sucursal en el ecosistema ServimOS + PedimOS.</p>
-          </aside>
+          </section>
+        ) : null}
 
-          <main className="panel">
+        {activeTab === "Explorar" ? (
+          <section className="panel">
             <div className="panel-head">
               <h2>Explorar</h2>
-              <input
-                className="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar sucursal o producto..."
-              />
+              <span className="muted">Elige un local</span>
             </div>
             <div className="list">
               {filteredBranches.map((branch) => (
@@ -234,114 +255,104 @@ export function App() {
                     <h3>{branch.nombre}</h3>
                     <p>{branch.slug}</p>
                   </div>
-                  <button onClick={() => setSelectedBranchSlug(branch.slug)}>Ver menu</button>
+                  <button onClick={() => setSelectedBranchSlug(branch.slug)}>Entrar</button>
                 </article>
               ))}
             </div>
-          </main>
+          </section>
+        ) : null}
 
-          <aside className="panel">
+        {activeTab === "Menu" ? (
+          <section className="panel">
             <div className="panel-head">
-              <h2>Portal del local</h2>
-              <div className="chip">Mi tarjeta</div>
+              <h2>Menu</h2>
+              <span className="muted">
+                {loadingMenu ? "Cargando..." : `${visibleProducts.length} productos`}
+              </span>
             </div>
-            <div className="product-focus">
-              {selectedProduct ? (
-                <>
+            {menuError ? <p className="muted">{menuError}</p> : null}
+            <div className="products-grid-lite">
+              {visibleProducts.map((product) => (
+                <article key={product.id} className="product-focus">
                   <img
-                    src={selectedProduct.imageUrl || "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?q=80&w=1200"}
-                    alt={selectedProduct.nombre}
+                    src={product.imageUrl || "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?q=80&w=1200"}
+                    alt={product.nombre}
                   />
-                  <h3>{selectedProduct.nombre}</h3>
-                  <p>ID {selectedProduct.id}</p>
-                  <button onClick={() => addProduct(selectedProduct.id, selectedProduct.nombre)}>Agregar al pedido</button>
-                </>
-              ) : (
-                <p className="muted">{loadingMenu ? "Cargando menu..." : "Selecciona una sucursal para cargar menu."}</p>
-              )}
-            </div>
-
-            <div className="products-inline">
-              {visibleProducts.slice(0, 6).map((product) => (
-                <button
-                  key={product.id}
-                  className={`product-pill ${activeProductId === product.id ? "active" : ""}`}
-                  onClick={() => setActiveProductId(product.id)}
-                >
-                  {product.nombre}
-                </button>
+                  <h3>{product.nombre}</h3>
+                  <button onClick={() => addProduct(product.id, product.nombre)}>Agregar</button>
+                </article>
               ))}
             </div>
+          </section>
+        ) : null}
 
-            <section className="cart-card">
-              <h3>Pedido</h3>
-              <label>API key</label>
-              <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="x-api-key" />
-              <label>Idempotency key</label>
-              <input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} />
-              <label>Sucursal</label>
-              <select value={selectedBranchSlug} onChange={(event) => setSelectedBranchSlug(event.target.value)}>
-                <option value="">Selecciona</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.slug}>
-                    {branch.nombre}
-                  </option>
-                ))}
-              </select>
-              <label>Nombre cliente</label>
-              <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-              <label>Telefono</label>
-              <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
-              <label>Direccion</label>
-              <input value={customerAddress} onChange={(event) => setCustomerAddress(event.target.value)} />
+        {activeTab === "Cuenta" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Cuenta</h2>
+              <span className="muted">Opcional después de pedir</span>
+            </div>
+            <p className="muted">
+              Puedes pedir como invitado y crear tu cuenta después del pago para guardar historial y favoritos.
+            </p>
+          </section>
+        ) : null}
 
-              <div className="cart-items">
-                {cart.map((item) => (
-                  <div key={item.id} className="cart-item">
-                    <div>
-                      <strong>{item.name}</strong>
-                      <p>Cantidad {item.qty}</p>
-                    </div>
-                    <span>{asCurrency(item.qty * item.unitPrice)}</span>
+        {activeTab === "Pedido" ? (
+          <section className="cart-card">
+            <h3>Tu pedido</h3>
+            <p className="muted">Sesión: {sessionReadySlug || "sin sesión activa"}</p>
+            <label>Idempotency key</label>
+            <input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} />
+            <label>Nombre</label>
+            <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+            <label>Teléfono</label>
+            <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+            <label>Dirección</label>
+            <input value={customerAddress} onChange={(event) => setCustomerAddress(event.target.value)} />
+            <div className="cart-items">
+              {cart.map((item) => (
+                <div key={item.id} className="cart-item">
+                  <div>
+                    <strong>{item.name}</strong>
+                    <p>Cantidad {item.qty}</p>
                   </div>
-                ))}
-              </div>
-              <div className="total">Total {asCurrency(total)}</div>
-              <div className="actions">
-                <button className="secondary" onClick={() => setCart(cartState.read())}>
-                  Refrescar
-                </button>
-                <button className="primary" disabled={submitting} onClick={checkout}>
-                  {submitting ? "Enviando..." : "Confirmar pedido"}
-                </button>
-              </div>
-              <button className="secondary full" onClick={pollStatus}>
+                  <span>{asCurrency(item.qty * item.unitPrice)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="total">Total {asCurrency(total)}</div>
+            <div className="actions">
+              <button className="secondary" onClick={() => setCart(cartState.read())}>
+                Refrescar
+              </button>
+              <button className="primary" disabled={submitting} onClick={checkout}>
+                {submitting ? "Enviando..." : "Confirmar pedido"}
+              </button>
+            </div>
+            <pre className="log">{statusLog.join("\n")}</pre>
+          </section>
+        ) : null}
+
+        {activeTab === "Historial" ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Historial</h2>
+              <button className="secondary" onClick={pollStatus}>
                 Consultar estado
               </button>
-              <div className="timeline">
-                {statusTimeline.map((row, index) => (
-                  <div key={`${row.at}-${index}`} className="timeline-row">
-                    <span>{row.at}</span>
-                    <strong>{row.status}</strong>
-                  </div>
-                ))}
-              </div>
-              <pre className="log">{statusLog.join("\n")}</pre>
-            </section>
-          </aside>
-        </section>
-
-        <section className="windows-card">
-          <h3>Navegacion por ventanas</h3>
-          <p className="muted">Mapa, explorar, menu, cuenta, pedido e historial con acceso rapido.</p>
-          <div className="windows-grid">
-            {["Mapa", "Explorar", "Menu", "Cuenta", "Pedido", "Historial"].map((item) => (
-              <div key={item} className="window-item">
-                {item}
-              </div>
-            ))}
-          </div>
-        </section>
+            </div>
+            <div className="timeline">
+              {statusTimeline.map((row, index) => (
+                <div key={`${row.at}-${index}`} className="timeline-row">
+                  <span>{row.at}</span>
+                  <strong>{row.status}</strong>
+                </div>
+              ))}
+            </div>
+            <pre className="log">{statusLog.join("\n")}</pre>
+          </section>
+        ) : null}
       </div>
     </div>
   );

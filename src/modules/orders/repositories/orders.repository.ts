@@ -76,6 +76,7 @@ export interface OrdersRepository {
   getPublicCatalogByRestauranteSlug(slug: string): Promise<PublicCatalogRecord | null>;
   findRestauranteBySlug(slug: string): Promise<RestauranteRecord | null>;
   findApiKeyByHash(hash: string): Promise<ApiKeyRecord | null>;
+  findAnyActiveApiKeyForRestaurante(restauranteId: string): Promise<ApiKeyRecord | null>;
   findProductsByIds(productIds: string[]): Promise<ProductScopeRecord[]>;
   findTamanosByIds(tamanoIds: string[]): Promise<ProductScopeRecord[]>;
   findModificadoresByIds(modificadorIds: string[]): Promise<ProductScopeRecord[]>;
