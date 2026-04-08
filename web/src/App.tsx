@@ -22,7 +22,7 @@ const readIntegrationConfig = (): { slug: string } => {
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("Mapa");
+  const [activeTab, setActiveTab] = useState<TabId>("Explorar");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchSlug, setSelectedBranchSlug] = useState("");
   const [menu, setMenu] = useState<MenuCatalog | null>(null);
@@ -59,6 +59,7 @@ export function App() {
   const [reservationPartyDraft, setReservationPartyDraft] = useState("2");
   const [reservationDurationDraft, setReservationDurationDraft] = useState("90");
   const [reservationNotesDraft, setReservationNotesDraft] = useState("");
+  const [uiNotice, setUiNotice] = useState("");
 
   useEffect(() => {
     const cfg = readIntegrationConfig();
@@ -140,15 +141,23 @@ export function App() {
   }, [menu?.productos, query]);
   const selectedProduct = visibleProducts[0] ?? null;
 
+  const getProductPrice = (product: (typeof visibleProducts)[number]): number => {
+    const firstSize = product.tamanos?.[0];
+    return firstSize?.precio ?? 38;
+  };
+
   const addProduct = (productId: string, productName: string) => {
+    const product = visibleProducts.find((item) => item.id === productId);
+    const unitPrice = product ? getProductPrice(product) : 38;
     const next = cartState.add({
       id: `${productId}-${Date.now()}`,
       productId,
       name: productName,
       qty: 1,
-      unitPrice: 38
+      unitPrice
     });
     setCart(next);
+    setUiNotice(`${productName} se agrego al pedido`);
   };
 
   const checkout = async () => {
@@ -405,7 +414,14 @@ export function App() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar sucursal o producto..."
             />
-            <select className="branch-select" value={selectedBranchSlug} onChange={(event) => setSelectedBranchSlug(event.target.value)}>
+            <select
+              className="branch-select"
+              value={selectedBranchSlug}
+              onChange={(event) => {
+                setSelectedBranchSlug(event.target.value);
+                setActiveTab("Menu");
+              }}
+            >
               <option value="">Sucursal</option>
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.slug}>
@@ -414,6 +430,7 @@ export function App() {
               ))}
             </select>
           </div>
+          {uiNotice ? <div className="ui-notice">{uiNotice}</div> : null}
         </header>
 
         {activeTab === "Mapa" ? (
@@ -439,7 +456,15 @@ export function App() {
                     <h3>{branch.nombre}</h3>
                     <p>{branch.slug}</p>
                   </div>
-                  <button onClick={() => setSelectedBranchSlug(branch.slug)}>Entrar</button>
+                  <button
+                    onClick={() => {
+                      setSelectedBranchSlug(branch.slug);
+                      setActiveTab("Menu");
+                      setUiNotice(`Sucursal activa: ${branch.nombre}`);
+                    }}
+                  >
+                    Entrar
+                  </button>
                 </article>
               ))}
             </div>
@@ -463,6 +488,7 @@ export function App() {
                     alt={product.nombre}
                   />
                   <h3>{product.nombre}</h3>
+                  <p className="muted">Desde {asCurrency(getProductPrice(product))}</p>
                   <button onClick={() => addProduct(product.id, product.nombre)}>Agregar</button>
                 </article>
               ))}

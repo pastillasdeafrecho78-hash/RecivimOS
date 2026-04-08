@@ -9,7 +9,7 @@
 body {
   margin: 0;
   font-family: Inter, system-ui, sans-serif;
-  background: #0f1218;
+  background: #11141b;
   color: #ecf0f8;
 }
 
@@ -45,7 +45,7 @@ body {
 .account-side-card,
 .account-reservation-card,
 .timeline {
-  background: rgba(23, 28, 38, 0.78);
+  background: rgba(19, 24, 34, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   box-shadow: 0 14px 32px rgba(4, 8, 17, 0.26);
@@ -139,9 +139,9 @@ body {
 }
 
 .tab-btn.active {
-  border-color: rgba(121, 177, 255, 0.74);
-  background: rgba(121, 177, 255, 0.18);
-  color: #d9e9ff;
+  border-color: rgba(255, 167, 107, 0.84);
+  background: rgba(255, 167, 107, 0.19);
+  color: #ffe1c8;
 }
 
 .top-nav-toolbar {
@@ -200,6 +200,16 @@ body {
   display: grid;
   place-items: center;
   color: rgba(232, 239, 252, 0.7);
+}
+
+.ui-notice {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 167, 107, 0.55);
+  background: rgba(255, 167, 107, 0.14);
+  color: #ffe6d2;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
 .list {
