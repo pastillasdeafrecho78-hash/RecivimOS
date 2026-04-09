@@ -122,6 +122,16 @@ body {
   margin-bottom: 12px;
 }
 
+.tab-grid-four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 761px) {
+  .tab-grid-four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .tab-btn {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.04);
@@ -430,6 +440,93 @@ button:hover {
   font-size: 24px;
 }
 
+.pedido-panel .field-label-pedido {
+  margin-top: 12px;
+  display: block;
+  font-size: 12px;
+  color: rgba(225, 235, 251, 0.82);
+}
+
+.branch-select-pedido {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(6, 10, 17, 0.5);
+  color: #f2f6ff;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.session-line {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.pedido-subtitle {
+  margin: 18px 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pedido-catalog-block {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.menu-search-inline {
+  margin-bottom: 12px;
+  max-width: 420px;
+}
+
+.products-grid-pedido {
+  margin-top: 4px;
+}
+
+.delivery-confirm-card {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 167, 107, 0.35);
+  background: rgba(255, 167, 107, 0.08);
+}
+
+.delivery-confirm-card label {
+  margin-top: 10px;
+  display: block;
+  font-size: 12px;
+  color: rgba(225, 235, 251, 0.82);
+}
+
+.delivery-confirm-card input {
+  width: 100%;
+  margin-top: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(6, 10, 17, 0.5);
+  color: #f2f6ff;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.confirm-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.pedido-advanced {
+  margin-top: 14px;
+  font-size: 13px;
+  color: rgba(228, 236, 251, 0.75);
+}
+
+.pedido-advanced summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
 .cart-card label {
   margin-top: 10px;
   display: block;
@@ -506,6 +603,7 @@ button:hover {
   }
 
   .tab-grid,
+  .tab-grid-four,
   .products-grid-lite,
   .form-grid,
   .form-grid.two-up,

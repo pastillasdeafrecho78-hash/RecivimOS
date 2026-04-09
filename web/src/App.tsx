@@ -10,6 +10,9 @@ const asCurrency = (amount: number): string =>
 const tabs = ["Mapa", "Explorar", "Menu", "Cuenta", "Pedido", "Historial"] as const;
 type TabId = (typeof tabs)[number];
 
+/** Pestañas ocultas en la UI por ahora; la lógica de Explorar/Menú sigue en código. */
+const tabsVisibleInNav = tabs.filter((t) => t !== "Explorar" && t !== "Menu");
+
 const readIntegrationConfig = (): { slug: string } => {
   try {
     const raw = localStorage.getItem("pedimos.integration.v1");
@@ -30,7 +33,7 @@ const writeIntegrationSlug = (slug: string): void => {
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("Explorar");
+  const [activeTab, setActiveTab] = useState<TabId>("Pedido");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchSlug, setSelectedBranchSlug] = useState("");
   const [menu, setMenu] = useState<MenuCatalog | null>(null);
@@ -121,6 +124,12 @@ export function App() {
       });
   }, [selectedBranchSlug]);
 
+  useEffect(() => {
+    if (activeTab === "Explorar" || activeTab === "Menu") {
+      setActiveTab("Pedido");
+    }
+  }, [activeTab]);
+
   const refreshAccount = async () => {
     setAccountLoading(true);
     setAccountError("");
@@ -170,8 +179,19 @@ export function App() {
   const selectBranchAndGoMenu = (slug: string, nombre: string) => {
     writeIntegrationSlug(slug);
     setSelectedBranchSlug(slug);
-    setActiveTab("Menu");
+    setActiveTab("Pedido");
     setUiNotice(`Sucursal activa: ${nombre}`);
+  };
+
+  const onPedidoBranchChange = (slug: string) => {
+    if (!slug) {
+      setSelectedBranchSlug("");
+      return;
+    }
+    const branch = branches.find((b) => b.slug === slug);
+    writeIntegrationSlug(slug);
+    setSelectedBranchSlug(slug);
+    setUiNotice(branch ? `Sucursal: ${branch.nombre}` : "");
   };
 
   const getProductPrice = (product: (typeof visibleProducts)[number]): number => {
@@ -202,6 +222,12 @@ export function App() {
       setStatusLog(["Agrega productos al carrito."]);
       return;
     }
+    const nameTrim = customerName.trim();
+    const addrTrim = customerAddress.trim();
+    if (!nameTrim || !addrTrim) {
+      setStatusLog(["Completa el nombre (a quien va el pedido) y la direccion de entrega para confirmar."]);
+      return;
+    }
 
     setSubmitting(true);
     const currentIdempotency = idempotencyKey.trim() || randomExternalOrderId();
@@ -210,10 +236,11 @@ export function App() {
         externalOrderId: currentIdempotency,
         tipoPedido: "DELIVERY" as const,
         canal: "EXTERNAL_APP" as const,
-        cliente:
-          customerName && customerPhone && customerAddress
-            ? { nombre: customerName, telefono: customerPhone, direccion: customerAddress }
-            : undefined,
+        cliente: {
+          nombre: nameTrim,
+          telefono: customerPhone.trim() || "sin telefono",
+          direccion: addrTrim
+        },
         items: cart.map((item) => ({
           productoId: item.productId,
           cantidad: item.qty,
@@ -431,10 +458,11 @@ export function App() {
             </div>
             <div className="follow-chip">Cuenta+Reservas v2 activas · Siguenos y descubre promos del dia</div>
           </div>
-          <nav className="tab-grid">
-            {tabs.map((tab) => (
+          <nav className="tab-grid tab-grid-four">
+            {tabsVisibleInNav.map((tab) => (
               <button
                 key={tab}
+                type="button"
                 className={`tab-btn ${activeTab === tab ? "active" : ""}`}
                 onClick={() => setActiveTab(tab)}
               >
@@ -444,16 +472,11 @@ export function App() {
           </nav>
           <div className="top-nav-branch-bar">
             {selectedBranchSlug ? (
-              <>
-                <span className="branch-context-label">
-                  En: <strong>{branchDisplayName}</strong>
-                </span>
-                <button type="button" className="secondary branch-change-btn" onClick={() => setActiveTab("Explorar")}>
-                  Cambiar sucursal
-                </button>
-              </>
+              <span className="branch-context-label">
+                En: <strong>{branchDisplayName}</strong>
+              </span>
             ) : (
-              <p className="muted branch-context-hint">Elige un local en Explorar para ver el menú y armar tu pedido.</p>
+              <p className="muted branch-context-hint">Selecciona la sucursal en la pestaña Pedido.</p>
             )}
           </div>
           {uiNotice ? <div className="ui-notice">{uiNotice}</div> : null}
@@ -720,32 +743,78 @@ export function App() {
         ) : null}
 
         {activeTab === "Pedido" ? (
-          <section className="cart-card">
+          <section className="cart-card pedido-panel">
             <h3>Tu pedido</h3>
-            <p className="muted">Sesión: {sessionReadySlug || "sin sesión activa"}</p>
+            <label className="field-label-pedido">Sucursal</label>
+            <select
+              className="branch-select-pedido"
+              value={selectedBranchSlug}
+              onChange={(event) => onPedidoBranchChange(event.target.value)}
+            >
+              <option value="">Elige sucursal</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.slug}>
+                  {branch.nombre}
+                </option>
+              ))}
+            </select>
+            <p className="muted session-line">Sesión: {sessionReadySlug || "sin sesión activa"}</p>
             {lastOrderId ? (
               <div className="last-order-banner">
                 <p className="muted">
                   <strong>Último pedido:</strong> {lastOrderId}
                 </p>
                 <p className="muted scope-note">
-                  El seguimiento usa esta sucursal y este ID. Si pediste en otra sucursal, ve a Explorar, elige esa
-                  sucursal y consulta en Historial; con cuenta, revisa también Cuenta.
+                  El seguimiento usa esta sucursal y este ID. Si pediste en otra sucursal, cambiala en Pedido y revisa
+                  Historial; con cuenta, revisa también Cuenta.
                 </p>
                 <button type="button" className="secondary" onClick={() => setActiveTab("Historial")}>
                   Ver en Historial
                 </button>
               </div>
             ) : null}
-            <label>Idempotency key</label>
-            <input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} />
-            <label>Nombre</label>
-            <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-            <label>Teléfono</label>
-            <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
-            <label>Dirección</label>
-            <input value={customerAddress} onChange={(event) => setCustomerAddress(event.target.value)} />
+
+            {selectedBranchSlug ? (
+              <div className="pedido-catalog-block">
+                <h4 className="pedido-subtitle">Agrega productos</h4>
+                {menuError ? <p className="muted menu-alert">{menuError}</p> : null}
+                {!loadingMenu && catalogProducts.length === 0 && !menuDegraded && !menuError ? (
+                  <p className="muted">Este local aún no tiene productos activos en la carta.</p>
+                ) : null}
+                <input
+                  className="search menu-search-inline"
+                  value={menuQuery}
+                  onChange={(event) => setMenuQuery(event.target.value)}
+                  placeholder="Buscar en el menú..."
+                />
+                {!loadingMenu &&
+                catalogProducts.length > 0 &&
+                visibleProducts.length === 0 &&
+                menuQuery.trim() ? (
+                  <p className="muted">Ningún producto coincide con tu búsqueda.</p>
+                ) : null}
+                {loadingMenu ? <p className="muted">Cargando menú...</p> : null}
+                <div className="products-grid-lite products-grid-pedido">
+                  {visibleProducts.map((product) => (
+                    <article key={product.id} className="product-focus">
+                      <img
+                        src={product.imageUrl || "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?q=80&w=1200"}
+                        alt={product.nombre}
+                      />
+                      <h3>{product.nombre}</h3>
+                      <p className="muted">Desde {asCurrency(getProductPrice(product))}</p>
+                      <button type="button" onClick={() => addProduct(product.id, product.nombre)}>
+                        Agregar
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <h4 className="pedido-subtitle">Tu carrito</h4>
             <div className="cart-items">
+              {cart.length === 0 ? <p className="muted">Aún no hay productos.</p> : null}
               {cart.map((item) => (
                 <div key={item.id} className="cart-item">
                   <div>
@@ -757,11 +826,46 @@ export function App() {
               ))}
             </div>
             <div className="total">Total {asCurrency(total)}</div>
+
+            {cart.length > 0 ? (
+              <div className="delivery-confirm-card">
+                <h4 className="pedido-subtitle">Confirmar entrega</h4>
+                <p className="muted confirm-hint">Completa estos datos para enviar tu pedido a domicilio.</p>
+                <label>Nombre (a quien va el pedido)</label>
+                <input
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  placeholder="Ej. María López"
+                  autoComplete="name"
+                />
+                <label>Dirección donde llevamos tu pedido</label>
+                <input
+                  value={customerAddress}
+                  onChange={(event) => setCustomerAddress(event.target.value)}
+                  placeholder="Calle, número, colonia, referencias"
+                  autoComplete="street-address"
+                />
+                <label>Teléfono (opcional)</label>
+                <input
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  placeholder="Para avisarte si hace falta"
+                  autoComplete="tel"
+                />
+              </div>
+            ) : null}
+
+            <details className="pedido-advanced">
+              <summary>Avanzado (idempotency)</summary>
+              <label>Idempotency key</label>
+              <input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} />
+            </details>
+
             <div className="actions">
-              <button className="secondary" onClick={() => setCart(cartState.read())}>
-                Refrescar
+              <button type="button" className="secondary" onClick={() => setCart(cartState.read())}>
+                Refrescar carrito
               </button>
-              <button className="primary" disabled={submitting} onClick={checkout}>
+              <button type="button" className="primary" disabled={submitting} onClick={checkout}>
                 {submitting ? "Enviando..." : "Confirmar pedido"}
               </button>
             </div>
