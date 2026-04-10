@@ -201,6 +201,53 @@ body {
   margin-bottom: 10px;
 }
 
+.menu-alert.link-error {
+  color: #ff9a9a;
+}
+
+.inline-code {
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: ui-monospace, monospace;
+}
+
+.menu-link-help {
+  margin: 0 0 16px;
+  max-width: 560px;
+  line-height: 1.45;
+}
+
+.manual-slug-card {
+  margin-top: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(6, 10, 17, 0.35);
+  max-width: 520px;
+}
+
+.manual-slug-card label {
+  display: block;
+  font-size: 12px;
+  color: rgba(225, 235, 251, 0.82);
+  margin-bottom: 6px;
+}
+
+.manual-slug-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.manual-slug-row .search {
+  flex: 1;
+  min-width: 180px;
+}
+
 .last-order-banner {
   margin: 12px 0;
   padding: 12px;

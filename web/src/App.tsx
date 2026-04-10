@@ -7,10 +7,15 @@ const randomExternalOrderId = (): string => `ext-${Date.now()}-${Math.floor(Math
 const asCurrency = (amount: number): string =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
 
-const tabs = ["Mapa", "Explorar", "Menu", "Cuenta", "Pedido", "Historial"] as const;
-type TabId = (typeof tabs)[number];
-
-const tabsVisibleInNav: TabId[] = ["Explorar", "Menu"];
+/** Enlace directo: ?sucursal=mi-slug o ?slug=mi-slug (mismo valor que en ServimOS / API). */
+function readSlugFromLocationSearch(): string {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get("sucursal") ?? params.get("slug") ?? "").trim();
+  } catch {
+    return "";
+  }
+}
 
 const readIntegrationConfig = (): { slug: string } => {
   try {
@@ -32,11 +37,9 @@ const writeIntegrationSlug = (slug: string): void => {
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("Explorar");
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchSlug, setSelectedBranchSlug] = useState("");
   const [menu, setMenu] = useState<MenuCatalog | null>(null);
-  const [exploreQuery, setExploreQuery] = useState("");
   const [menuQuery, setMenuQuery] = useState("");
   const [menuDegraded, setMenuDegraded] = useState(false);
   const [menuError, setMenuError] = useState("");
@@ -51,15 +54,51 @@ export function App() {
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [uiNotice, setUiNotice] = useState("");
+  const [manualSlugDraft, setManualSlugDraft] = useState("");
+  const [linkError, setLinkError] = useState("");
 
   useEffect(() => {
-    const cfg = readIntegrationConfig();
-    setSelectedBranchSlug(cfg.slug);
     setCart(cartState.read());
+    const urlSlugRaw = readSlugFromLocationSearch();
+    const urlSlugNorm = urlSlugRaw.toLowerCase();
+
     void apiClient
       .getBranches()
       .then((loaded) => {
         setBranches(loaded);
+        let chosen = "";
+
+        if (urlSlugNorm) {
+          const fromUrl = loaded.find((b) => b.slug.toLowerCase() === urlSlugNorm);
+          if (fromUrl) {
+            chosen = fromUrl.slug;
+            writeIntegrationSlug(fromUrl.slug);
+            setUiNotice(`Menú: ${fromUrl.nombre}`);
+            try {
+              const next = new URLSearchParams(window.location.search);
+              next.set("sucursal", fromUrl.slug);
+              next.delete("slug");
+              const qs = next.toString();
+              window.history.replaceState({}, "", qs ? `?${qs}` : window.location.pathname);
+            } catch {
+              /* ignore */
+            }
+          } else {
+            setLinkError(
+              `No hay sucursal con slug «${urlSlugRaw}». Pide el enlace correcto al restaurante o escribe el slug abajo.`
+            );
+          }
+        }
+
+        if (!chosen) {
+          const cfg = readIntegrationConfig();
+          if (cfg.slug) {
+            const hit = loaded.find((b) => b.slug === cfg.slug);
+            if (hit) chosen = hit.slug;
+          }
+        }
+
+        setSelectedBranchSlug(chosen);
       })
       .catch(() => setBranches([]));
   }, []);
@@ -70,6 +109,7 @@ export function App() {
 
   useEffect(() => {
     if (!selectedBranchSlug) return;
+    setLinkError("");
     setSessionReadySlug("");
     setLoadingMenu(true);
     setMenuError("");
@@ -101,11 +141,6 @@ export function App() {
   }, [selectedBranchSlug]);
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.qty * item.unitPrice, 0), [cart]);
-  const filteredBranches = useMemo(() => {
-    const term = exploreQuery.trim().toLowerCase();
-    if (!term) return branches;
-    return branches.filter((branch) => branch.nombre.toLowerCase().includes(term) || branch.slug.toLowerCase().includes(term));
-  }, [branches, exploreQuery]);
   const catalogProducts = menu?.productos ?? [];
   const visibleProducts = useMemo(() => {
     const term = menuQuery.trim().toLowerCase();
@@ -121,11 +156,30 @@ export function App() {
     );
   }, [branches, menu?.restaurante?.nombre, selectedBranchSlug]);
 
-  const selectBranchAndGoMenu = (slug: string, nombre: string) => {
-    writeIntegrationSlug(slug);
-    setSelectedBranchSlug(slug);
-    setActiveTab("Menu");
-    setUiNotice(`Sucursal activa: ${nombre}`);
+  const applySlug = (raw: string): void => {
+    const norm = raw.trim().toLowerCase();
+    setLinkError("");
+    if (!norm) {
+      setLinkError("Escribe el slug de la sucursal (ej. principal).");
+      return;
+    }
+    const hit = branches.find((b) => b.slug.toLowerCase() === norm);
+    if (!hit) {
+      setLinkError(`No encontramos «${raw.trim()}». Revisa el slug o vuelve a cargar la página.`);
+      return;
+    }
+    writeIntegrationSlug(hit.slug);
+    setSelectedBranchSlug(hit.slug);
+    setUiNotice(`Menú: ${hit.nombre}`);
+    try {
+      const next = new URLSearchParams(window.location.search);
+      next.set("sucursal", hit.slug);
+      next.delete("slug");
+      const qs = next.toString();
+      window.history.replaceState({}, "", qs ? `?${qs}` : window.location.pathname);
+    } catch {
+      /* ignore */
+    }
   };
 
   const getProductPrice = (product: (typeof visibleProducts)[number]): number => {
@@ -149,7 +203,7 @@ export function App() {
 
   const checkout = async () => {
     if (!selectedBranchSlug) {
-      setStatusLog(["Selecciona sucursal para continuar."]);
+      setStatusLog(["Indica la sucursal (enlace o slug) para continuar."]);
       return;
     }
     if (!cart.length) {
@@ -219,196 +273,187 @@ export function App() {
               <div className="badge">PedimOS</div>
               <div>
                 <strong className="brand-title">
-                  {branchDisplayName || menu?.restaurante?.nombre || "Pide lo que se te antoje"}
+                  {branchDisplayName || menu?.restaurante?.nombre || "Menú y pedido"}
                 </strong>
-                <p className="brand-subtitle">Explora locales, arma tu pedido y confirma la entrega</p>
+                <p className="brand-subtitle">
+                  Enlace directo: añade <code className="inline-code">?sucursal=slug-de-sucursal</code> a la URL
+                </p>
               </div>
             </div>
-            <div className="follow-chip">Pedidos a domicilio · Elige sucursal en Explorar</div>
+            <div className="follow-chip">Pedidos a domicilio · Un menú por enlace o slug</div>
           </div>
-          <nav className="tab-grid tab-grid-two">
-            {tabsVisibleInNav.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </nav>
           <div className="top-nav-branch-bar">
             {selectedBranchSlug ? (
               <span className="branch-context-label">
                 En: <strong>{branchDisplayName}</strong>
               </span>
             ) : (
-              <p className="muted branch-context-hint">Selecciona la sucursal en Explorar.</p>
+              <p className="muted branch-context-hint">Abre el menú con el enlace de tu sucursal o escribe el slug.</p>
             )}
           </div>
           {uiNotice ? <div className="ui-notice">{uiNotice}</div> : null}
         </header>
 
-        {activeTab === "Explorar" ? (
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Explorar</h2>
-              <span className="muted">Elige un local</span>
-            </div>
-            <input
-              className="search explore-search"
-              value={exploreQuery}
-              onChange={(event) => setExploreQuery(event.target.value)}
-              placeholder="Buscar por nombre o slug de sucursal..."
-            />
-            <div className="list">
-              {filteredBranches.map((branch) => (
-                <article key={branch.id} className={`branch-card ${selectedBranchSlug === branch.slug ? "active" : ""}`}>
-                  <div>
-                    <h3>{branch.nombre}</h3>
-                    <p>{branch.slug}</p>
-                  </div>
-                  <button type="button" onClick={() => selectBranchAndGoMenu(branch.slug, branch.nombre)}>
-                    Entrar
-                  </button>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {activeTab === "Menu" ? (
-          <section className="panel">
-            {!selectedBranchSlug ? (
-              <>
-                <div className="panel-head">
-                  <h2>Menu</h2>
-                </div>
-                <p className="muted">Primero elige una sucursal en Explorar.</p>
-                <button type="button" className="primary" onClick={() => setActiveTab("Explorar")}>
-                  Ir a Explorar
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="panel-head menu-panel-head">
-                  <div>
-                    <h2>Menu</h2>
-                    <span className="muted">
-                      {loadingMenu ? "Cargando..." : `${visibleProducts.length} productos mostrados`}
-                      {!loadingMenu && catalogProducts.length !== visibleProducts.length && menuQuery.trim()
-                        ? ` · ${catalogProducts.length} en la carta`
-                        : null}
-                    </span>
-                  </div>
+        <section className="panel">
+          {!selectedBranchSlug ? (
+            <>
+              <div className="panel-head">
+                <h2>Menú</h2>
+                <span className="muted">Necesitamos saber qué sucursal</span>
+              </div>
+              {linkError ? <p className="menu-alert link-error">{linkError}</p> : null}
+              <p className="muted menu-link-help">
+                El restaurante puede compartirte un enlace como:{" "}
+                <strong>
+                  {typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""}
+                  ?sucursal=<em>tu-slug</em>
+                </strong>
+                . El slug es el mismo que usa la sucursal en ServimOS (ej. <code className="inline-code">principal</code>
+                ).
+              </p>
+              <div className="manual-slug-card">
+                <label htmlFor="manual-slug">Slug de la sucursal</label>
+                <div className="manual-slug-row">
                   <input
-                    className="search menu-search"
-                    value={menuQuery}
-                    onChange={(event) => setMenuQuery(event.target.value)}
-                    placeholder="Buscar en el menú..."
+                    id="manual-slug"
+                    className="search"
+                    value={manualSlugDraft}
+                    onChange={(e) => setManualSlugDraft(e.target.value)}
+                    placeholder="ej. principal"
+                    autoComplete="off"
                   />
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={!branches.length}
+                    onClick={() => applySlug(manualSlugDraft)}
+                  >
+                    Ver menú
+                  </button>
                 </div>
-                <p className="muted session-line">Sesión: {sessionReadySlug || "sin sesión activa"}</p>
-                {lastOrderId ? (
-                  <div className="last-order-banner">
-                    <p className="muted">
-                      <strong>Último pedido:</strong> {lastOrderId}
-                    </p>
-                  </div>
+                {!branches.length ? (
+                  <p className="muted">No se pudieron cargar las sucursales. Revisa la conexión o vuelve más tarde.</p>
                 ) : null}
-                {menuError ? <p className="muted menu-alert">{menuError}</p> : null}
-                {!loadingMenu && catalogProducts.length === 0 && !menuDegraded && !menuError ? (
-                  <p className="muted">Este local aún no tiene productos activos en la carta.</p>
-                ) : null}
-                {!loadingMenu &&
-                catalogProducts.length > 0 &&
-                visibleProducts.length === 0 &&
-                menuQuery.trim() ? (
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="panel-head menu-panel-head">
+                <div>
+                  <h2>Menú</h2>
+                  <span className="muted">
+                    {loadingMenu ? "Cargando..." : `${visibleProducts.length} productos mostrados`}
+                    {!loadingMenu && catalogProducts.length !== visibleProducts.length && menuQuery.trim()
+                      ? ` · ${catalogProducts.length} en la carta`
+                      : null}
+                  </span>
+                </div>
+                <input
+                  className="search menu-search"
+                  value={menuQuery}
+                  onChange={(event) => setMenuQuery(event.target.value)}
+                  placeholder="Buscar en el menú..."
+                />
+              </div>
+              <p className="muted session-line">Sesión: {sessionReadySlug || "sin sesión activa"}</p>
+              {lastOrderId ? (
+                <div className="last-order-banner">
                   <p className="muted">
-                    Ningún producto coincide con tu búsqueda. Prueba otro término o borra el filtro del menú.
+                    <strong>Último pedido:</strong> {lastOrderId}
                   </p>
-                ) : null}
-                <div className="products-grid-lite">
-                  {visibleProducts.map((product) => (
-                    <article key={product.id} className="product-focus">
-                      <img
-                        src={product.imageUrl || "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?q=80&w=1200"}
-                        alt={product.nombre}
-                      />
-                      <h3>{product.nombre}</h3>
-                      <p className="muted">Desde {asCurrency(getProductPrice(product))}</p>
-                      <button type="button" onClick={() => addProduct(product.id, product.nombre)}>
-                        Agregar
-                      </button>
-                    </article>
+                </div>
+              ) : null}
+              {menuError ? <p className="muted menu-alert">{menuError}</p> : null}
+              {!loadingMenu && catalogProducts.length === 0 && !menuDegraded && !menuError ? (
+                <p className="muted">Este local aún no tiene productos activos en la carta.</p>
+              ) : null}
+              {!loadingMenu &&
+              catalogProducts.length > 0 &&
+              visibleProducts.length === 0 &&
+              menuQuery.trim() ? (
+                <p className="muted">
+                  Ningún producto coincide con tu búsqueda. Prueba otro término o borra el filtro del menú.
+                </p>
+              ) : null}
+              <div className="products-grid-lite">
+                {visibleProducts.map((product) => (
+                  <article key={product.id} className="product-focus">
+                    <img
+                      src={product.imageUrl || "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?q=80&w=1200"}
+                      alt={product.nombre}
+                    />
+                    <h3>{product.nombre}</h3>
+                    <p className="muted">Desde {asCurrency(getProductPrice(product))}</p>
+                    <button type="button" onClick={() => addProduct(product.id, product.nombre)}>
+                      Agregar
+                    </button>
+                  </article>
+                ))}
+              </div>
+
+              <div className="menu-cart-block">
+                <h3 className="pedido-subtitle">Tu carrito</h3>
+                <div className="cart-items">
+                  {cart.length === 0 ? <p className="muted">Aún no hay productos.</p> : null}
+                  {cart.map((item) => (
+                    <div key={item.id} className="cart-item">
+                      <div>
+                        <strong>{item.name}</strong>
+                        <p>Cantidad {item.qty}</p>
+                      </div>
+                      <span>{asCurrency(item.qty * item.unitPrice)}</span>
+                    </div>
                   ))}
                 </div>
+                <div className="total">Total {asCurrency(total)}</div>
 
-                <div className="menu-cart-block">
-                  <h3 className="pedido-subtitle">Tu carrito</h3>
-                  <div className="cart-items">
-                    {cart.length === 0 ? <p className="muted">Aún no hay productos.</p> : null}
-                    {cart.map((item) => (
-                      <div key={item.id} className="cart-item">
-                        <div>
-                          <strong>{item.name}</strong>
-                          <p>Cantidad {item.qty}</p>
-                        </div>
-                        <span>{asCurrency(item.qty * item.unitPrice)}</span>
-                      </div>
-                    ))}
+                {cart.length > 0 ? (
+                  <div className="delivery-confirm-card">
+                    <h4 className="pedido-subtitle">Datos de entrega</h4>
+                    <p className="muted confirm-hint">Nombre, apellido y dirección donde llevamos tu pedido.</p>
+                    <label>Nombre</label>
+                    <input
+                      value={customerFirstName}
+                      onChange={(event) => setCustomerFirstName(event.target.value)}
+                      placeholder="Ej. María"
+                      autoComplete="given-name"
+                    />
+                    <label>Apellido</label>
+                    <input
+                      value={customerLastName}
+                      onChange={(event) => setCustomerLastName(event.target.value)}
+                      placeholder="Ej. López"
+                      autoComplete="family-name"
+                    />
+                    <label>Dirección</label>
+                    <input
+                      value={customerAddress}
+                      onChange={(event) => setCustomerAddress(event.target.value)}
+                      placeholder="Calle, número, colonia, referencias"
+                      autoComplete="street-address"
+                    />
                   </div>
-                  <div className="total">Total {asCurrency(total)}</div>
+                ) : null}
 
-                  {cart.length > 0 ? (
-                    <div className="delivery-confirm-card">
-                      <h4 className="pedido-subtitle">Datos de entrega</h4>
-                      <p className="muted confirm-hint">Nombre, apellido y dirección donde llevamos tu pedido.</p>
-                      <label>Nombre</label>
-                      <input
-                        value={customerFirstName}
-                        onChange={(event) => setCustomerFirstName(event.target.value)}
-                        placeholder="Ej. María"
-                        autoComplete="given-name"
-                      />
-                      <label>Apellido</label>
-                      <input
-                        value={customerLastName}
-                        onChange={(event) => setCustomerLastName(event.target.value)}
-                        placeholder="Ej. López"
-                        autoComplete="family-name"
-                      />
-                      <label>Dirección</label>
-                      <input
-                        value={customerAddress}
-                        onChange={(event) => setCustomerAddress(event.target.value)}
-                        placeholder="Calle, número, colonia, referencias"
-                        autoComplete="street-address"
-                      />
-                    </div>
-                  ) : null}
+                <details className="pedido-advanced">
+                  <summary>Avanzado (idempotency)</summary>
+                  <label>Idempotency key</label>
+                  <input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} />
+                </details>
 
-                  <details className="pedido-advanced">
-                    <summary>Avanzado (idempotency)</summary>
-                    <label>Idempotency key</label>
-                    <input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} />
-                  </details>
-
-                  <div className="actions">
-                    <button type="button" className="secondary" onClick={() => setCart(cartState.read())}>
-                      Refrescar carrito
-                    </button>
-                    <button type="button" className="primary" disabled={submitting} onClick={checkout}>
-                      {submitting ? "Enviando..." : "Confirmar pedido"}
-                    </button>
-                  </div>
-                  <pre className="log">{statusLog.join("\n")}</pre>
+                <div className="actions">
+                  <button type="button" className="secondary" onClick={() => setCart(cartState.read())}>
+                    Refrescar carrito
+                  </button>
+                  <button type="button" className="primary" disabled={submitting} onClick={checkout}>
+                    {submitting ? "Enviando..." : "Confirmar pedido"}
+                  </button>
                 </div>
-              </>
-            )}
-          </section>
-        ) : null}
+                <pre className="log">{statusLog.join("\n")}</pre>
+              </div>
+            </>
+          )}
+        </section>
       </div>
     </div>
   );
