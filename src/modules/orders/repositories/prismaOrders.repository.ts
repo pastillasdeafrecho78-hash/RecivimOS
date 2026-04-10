@@ -11,6 +11,7 @@ import type {
   ProductScopeRecord,
   RestauranteRecord
 } from "./orders.repository.js";
+import { externalOrderActorEmail } from "../lib/externalOrderActorEmail.js";
 
 const mapRestaurante = (row: {
   id: string;
@@ -264,6 +265,18 @@ export class PrismaOrdersRepository implements OrdersRepository {
           limit 1
         `);
         createdById = scoped[0]?.id;
+      }
+      if (!createdById) {
+        const integrationEmail = externalOrderActorEmail(params.restaurante.id);
+        const integrationRows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          select "id"
+          from "Usuario"
+          where "restauranteId" = ${params.restaurante.id}
+            and "email" = ${integrationEmail}
+            and "activo" = true
+          limit 1
+        `);
+        createdById = integrationRows[0]?.id;
       }
       if (!createdById) {
         const userRows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
