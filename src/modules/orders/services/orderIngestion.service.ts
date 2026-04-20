@@ -89,7 +89,16 @@ export class OrderIngestionService {
     data: {
       orderId: string;
       restauranteId: string;
-      estado: "PENDIENTE" | "EN_PREPARACION" | "LISTO" | "SERVIDO" | "PAGADO" | "CANCELADO";
+        estado:
+          | "SOLICITUD"
+          | "EN_COLA"
+          | "RECHAZADO"
+          | "PENDIENTE"
+          | "EN_PREPARACION"
+          | "LISTO"
+          | "SERVIDO"
+          | "PAGADO"
+          | "CANCELADO";
     };
   }> {
     const order = await this.repository.findOrderById(orderId);

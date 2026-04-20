@@ -3,6 +3,9 @@ import type { CreateExternalOrderBody } from "../contracts/createExternalOrder.c
 export type IntegrationScope = "orders:create" | "orders:read";
 export type IdempotencyStatus = "processing" | "completed";
 export type OrderStatus =
+  | "SOLICITUD"
+  | "EN_COLA"
+  | "RECHAZADO"
   | "PENDIENTE"
   | "EN_PREPARACION"
   | "LISTO"

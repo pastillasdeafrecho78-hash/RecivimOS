@@ -24,6 +24,9 @@ export type CreateOrderPayload = {
     notas?: string;
     modificadores: Array<{ modificadorId: string }>;
   }>;
+  modoD?: {
+    acceptQueueWhenSaturated?: boolean;
+  };
 };
 
 export type AccountMe = {

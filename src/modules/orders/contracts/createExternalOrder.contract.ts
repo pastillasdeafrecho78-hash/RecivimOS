@@ -53,7 +53,16 @@ export type CreateExternalOrderSuccess = {
     numeroComanda: number;
     restauranteId: string;
     restauranteSlug: string;
-    estado: "PENDIENTE" | "EN_PREPARACION" | "LISTO" | "SERVIDO" | "PAGADO" | "CANCELADO";
+    estado:
+      | "SOLICITUD"
+      | "EN_COLA"
+      | "RECHAZADO"
+      | "PENDIENTE"
+      | "EN_PREPARACION"
+      | "LISTO"
+      | "SERVIDO"
+      | "PAGADO"
+      | "CANCELADO";
     origen: "EXTERNAL_API";
     idempotent: boolean;
     createdAt: string;

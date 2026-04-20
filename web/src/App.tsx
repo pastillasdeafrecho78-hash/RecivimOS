@@ -7,6 +7,22 @@ const randomExternalOrderId = (): string => `ext-${Date.now()}-${Math.floor(Math
 const asCurrency = (amount: number): string =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
 
+const explainOrderStatus = (status: string | undefined): string => {
+  if (!status) return "Estado no informado";
+  switch (status) {
+    case "SOLICITUD":
+      return "Tu pedido quedó como solicitud. El equipo lo revisará en breve.";
+    case "EN_COLA":
+      return "Tu pedido entró a la cola por saturación. Se procesará por prioridad.";
+    case "RECHAZADO":
+      return "Tu solicitud fue rechazada.";
+    case "PENDIENTE":
+      return "Tu pedido fue aceptado y está pendiente de preparación.";
+    default:
+      return `Estado actual: ${status}`;
+  }
+};
+
 /** Enlace directo: ?sucursal=mi-slug o ?slug=mi-slug (mismo valor que en ServimOS / API). */
 function readSlugFromLocationSearch(): string {
   try {
@@ -236,19 +252,46 @@ export function App() {
           productoId: item.productId,
           cantidad: item.qty,
           modificadores: []
-        }))
+        })),
       };
 
-      const created = await apiClient.createOrder({
-        restauranteSlug: selectedBranchSlug,
-        idempotencyKey: currentIdempotency,
-        payload
-      });
+      let created: Record<string, unknown>;
+      try {
+        created = await apiClient.createOrder({
+          restauranteSlug: selectedBranchSlug,
+          idempotencyKey: currentIdempotency,
+          payload,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        const saturated = message.includes("restaurant_saturated");
+        if (!saturated) throw err;
+        const confirmQueue = window.confirm(
+          "El restaurante está saturado y tu pedido no entró directo a cocina.\n\n¿Quieres enviarlo a cola para que se prepare cuando haya capacidad?"
+        );
+        if (!confirmQueue) {
+          setStatusLog([
+            "Pedido cancelado por saturación.",
+            "Si cambias de opinión, puedes intentarlo nuevamente y aceptar entrar en cola.",
+          ]);
+          return;
+        }
+        created = await apiClient.createOrder({
+          restauranteSlug: selectedBranchSlug,
+          idempotencyKey: currentIdempotency,
+          payload: {
+            ...payload,
+            modoD: { acceptQueueWhenSaturated: true },
+          },
+        });
+      }
 
       const maybeOrderId = (created as { data?: { orderId?: string } }).data?.orderId ?? "";
+      const orderStatus = (created as { data?: { estado?: string } }).data?.estado;
       setLastOrderId(maybeOrderId);
       setStatusLog([
-        "Pedido creado correctamente.",
+        "Pedido enviado correctamente.",
+        explainOrderStatus(orderStatus),
         `Idempotency: ${currentIdempotency}`,
         JSON.stringify(created, null, 2),
         maybeOrderId ? `OrderId: ${maybeOrderId}` : "No se recibió orderId."
